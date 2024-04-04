@@ -1,28 +1,41 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const fs = require('fs');
-const json2csv = require('json2csv').parse;
+const mysql = require('mysql');
 
 const app = express();
 app.use(bodyParser.json());
 
-// API endpoint to receive data from the companion app
-app.post('/madden-stats', (req, res) => {
-    const data = req.body;
-
-    // Generate JSON file
-    const jsonFileName = `data_${Date.now()}.json`;
-    fs.writeFileSync(jsonFileName, JSON.stringify(data));
-
-    // Generate CSV file
-    const csvFileName = `data_${Date.now()}.csv`;
-    const csvData = json2csv(data);
-    fs.writeFileSync(csvFileName, csvData);
-
-    res.status(200).send('Data received and files generated successfully');
+// Create a connection pool to the MySQL database
+const pool = mysql.createPool({
+  connectionLimit: 10,
+  host: 'pdb1054.awardspace.net',
+  user: '4461638_wpress05438709',
+  password: process.env.DB_PASSWORD,
+  database: '4461638_wpress05438709'
 });
 
+// Endpoint to handle incoming stats data from the companion app
+app.post('/madden-stats', (req, res) => {
+  const data = req.body;
+
+  // Insert the received stats data into the MySQL database
+  const query = 'INSERT INTO stats_table (stat_name, stat_value) VALUES ?';
+  const values = Object.entries(data).map(([statName, statValue]) => [statName, statValue]);
+
+  pool.query(query, [values], (error, results, fields) => {
+    if (error) {
+      console.error('Error inserting data into MySQL:', error);
+      res.status(500).send('Internal server error');
+      return;
+    }
+
+    console.log('Stats data inserted into MySQL:', results.affectedRows);
+    res.status(200).send('Stats data inserted successfully');
+  });
+});
+
+// Start the server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
